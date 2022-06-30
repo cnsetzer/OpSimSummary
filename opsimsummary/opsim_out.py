@@ -629,7 +629,9 @@ class OpSimOutput(object):
         propDict = OpSimOutput.get_propIDDict(proposals, opsimversion=opsimversion)
 
         # Seq of propIDs consistent with subset
-        _propIDs = OpSimOutput.propIDVals(subset, propDict, proposals)
+        _propIDs = OpSimOutput.propIDVals(
+            subset, propDict, proposals, opsimversion=opsimversion
+        )
 
         # If propIDs and subset were both provided, override subset propIDs
         propIDs = OpSimOutput._overrideSubsetPropID(user_propIDs, _propIDs)
@@ -647,7 +649,7 @@ class OpSimOutput(object):
         return engine
 
     @staticmethod
-    def dropDuplicates(df, propIDDict, opsimversion):
+    def dropDuplicates(df, propIDDict, opsimversion="fbsv2"):
         """
         drop duplicates ensuring keeping identity of ddf visits
 
@@ -662,23 +664,35 @@ class OpSimOutput(object):
         """
         if opsimversion == "sstf":
             return df
+        if opsimversion == "lsstv3":
+            propIDName = "propID"
+        elif opsimversion == "lsstv4":
+            propIDName = "propId"
+        elif opsimversion == "fbsv1":
+            propIDName = "proposalId"
+        elif opsimversion == "fbsv2":
+            propIDName = "proposalId"
+        else:
+            raise NotImplementedError(
+                "`dropDuplicates` is not implemented for this `opsimversion`"
+            )
 
         # As duplicates are dropped in order, reorder IDs so that
         # DDF is lowest, WFD next lowest, everything else as is
-        minPropID = df.propID.min()
+        minPropID = getattr(df, propIDName).min()
         ddfID = propIDDict["ddf"]
         wfdID = propIDDict["wfd"]
         ddfPropID = minPropID - 1
         wfdPropID = minPropID - 2
 
-        orig_propID = df.propID.values
+        orig_propID = getattr(df, propIDName).values
         df["orig_propID"] = orig_propID
         # if np.__version__ >= 1.13:
         #    ddfmask = np.isin(df.propID, ddfID)
         #    wfdmask = np.isin(df.propID, wfdID)
         # else:
-        ddfmask = np.in1d(df.propID, ddfID)
-        wfdmask = np.in1d(df.propID, wfdID)
+        ddfmask = np.in1d(getattr(df, propIDName), ddfID)
+        wfdmask = np.in1d(getattr(df, propIDName), wfdID)
 
         df.loc[ddfmask, "propID"] = ddfPropID
         df.loc[wfdmask, "propID"] = wfdPropID
@@ -843,7 +857,7 @@ class OpSimOutput(object):
         return pdict
 
     @staticmethod
-    def propIDVals(subset, propIDDict, proposalTable):
+    def propIDVals(subset, propIDDict, proposalTable, opsimversion="fbsv2"):
         """
         Parameters:
         ----------
@@ -860,6 +874,21 @@ class OpSimOutput(object):
         -------
         list of propID values (integers) associated with the subset
         """
+        if opsimversion == "lsstv3":
+            propIDName = "propID"
+        elif opsimversion == "sstf":
+            propIDName = "propId"
+        elif opsimversion == "lsstv4":
+            propIDName = "propId"
+        elif opsimversion == "fbsv1":
+            propIDName = "proposalId"
+        elif opsimversion == "fbsv2":
+            propIDName = "proposalId"
+        else:
+            raise NotImplementedError(
+                "`propIDVals` is not implemented for this `opsimversion`"
+            )
+
         if subset is None:
             raise ValueError("subset arg in propIDVals cannot be None")
 
@@ -869,7 +898,7 @@ class OpSimOutput(object):
             x = [propIDDict["ddf"], propIDDict["wfd"]]
         elif subset.lower() in ("_all", "unique_all"):
             if proposalTable is not None:
-                x = proposalTable.propID.values
+                x = getattr(proposalTable, propIDName).values
             else:
                 return None
         else:
